@@ -137,6 +137,18 @@ npm config set registry https://registry.npmjs.org/
 npm install
 ```
 
+### CPU architecture of the containers
+
+The SDK sets a platform only where an image exists for a single architecture:
+
+- apache, php, php-standalone, nginx, selenium (chrome latest), node, redis, mailpit, adminer, varnish and sphinx run on the platform of the host.
+- mysql runs on `MYSQL_PLATFORM` from `.env`, default `linux/amd64`, because the database images are published for amd64 only.
+- elasticsearch, selenium-chrome-126, selenium-chrome-debug and selenium-firefox stay on `linux/x86_64`, their images exist for amd64 only.
+
+On arm64 hosts the pinned services run emulated, as before. To force a service onto another platform, add `platform: linux/amd64` to it in your `docker-compose.yml` and run `make up`.
+
+A `docker-compose.yml` created before this change still contains `platform: linux/x86_64` for apache and php. Remove these lines and run `make up` to switch an existing setup.
+
 ### Node.js/NPM install issues on MacBook M2/M3 (Apple Silicon)
 
 If you run `npm install` and node dependencies do not install (especially with errors related to PhantomJS or other native binaries), this is likely due to architecture differences:

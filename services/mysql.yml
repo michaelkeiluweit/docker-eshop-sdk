@@ -1,5 +1,5 @@
   mysql:
-    platform: linux/amd64
+    platform: ${MYSQL_PLATFORM:-linux/amd64}
     image: oxidesales/oxideshop-docker-database:${MYSQL_VERSION}
     cap_add:
       - SYS_NICE  # CAP_SYS_NICE

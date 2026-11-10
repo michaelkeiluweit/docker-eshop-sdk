@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Configurable Xdebug mode via `XDEBUG_MODE` on the php and php-standalone services. The default is unchanged (`debug,profile`); setting `XDEBUG_MODE=off` in `.env` removes the per-function-call overhead, which measured 140ms against 15ms for fib(27) on PHP 8.4
 
 ### Changed
+- The apache, php, php-standalone, nginx and selenium (chrome latest) services no longer set `platform: linux/x86_64` and run on the platform of the host. Nothing changes on x86_64 hosts. On arm64 hosts (Apple Silicon) newly generated setups run these services natively instead of emulated; an existing `docker-compose.yml` keeps its pins until it is regenerated
+- The platform of the mysql service is configurable via `MYSQL_PLATFORM`. The default is unchanged (`linux/amd64`)
 - MySQL and Selenium healthchecks poll every 30s once the service is up instead of every 2s and 1s forever; `start_interval` keeps startup detection at the previous speed. The permanent fast polling kept dockerd and containerd busy on completely idle stacks
 - Default Nginx configuration directory changed to fit development practices
 - Replace Mailhog with Mailpit service
