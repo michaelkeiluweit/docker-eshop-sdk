@@ -1,0 +1,151 @@
+name: arch-check
+
+# Installs a shop with the upstream recipes on real x86_64 and arm64 hosts,
+# once from upstream master and once from every branch under test, and
+# records which architecture each container runs on and whether the shop,
+# the admin and a Selenium browser session work.
+
+on:
+  push:
+    branches: [arch-ci]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shop:
+    name: ${{ matrix.ref }} / ${{ matrix.runner }} / ${{ matrix.recipe }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        recipe: [76ce, 65ce]
+        ref:
+          - master
+          - no-platform-pin-php-apache
+          - no-platform-pin-nginx
+          - no-platform-pin-selenium-chrome
+          - mysql-platform-configurable
+          - platform-not-prescribed
+    steps:
+      - name: Check out the checks
+        uses: actions/checkout@v4
+        with:
+          path: ci
+
+      - name: Check out the SDK under test
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.ref == 'master' && 'OXID-eSales/docker-eshop-sdk' || github.repository }}
+          ref: ${{ matrix.ref }}
+          path: sdk
+
+      - name: Clone the recipes
+        run: git clone --recurse-submodules https://github.com/OXID-eSales/docker-eshop-sdk-recipes sdk/recipes/oxid-esales
+
+      # Pinned amd64 images need emulation on the arm64 runner, the same way
+      # Docker Desktop provides it on Apple Silicon.
+      - name: Enable amd64 emulation
+        if: runner.arch == 'ARM64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+
+      - name: Prepare the host
+        run: |
+          echo "127.0.0.1 localhost.local" | sudo tee -a /etc/hosts
+          sudo systemctl stop mysql apache2 nginx 2>/dev/null || true
+          mkdir -p sdk/data/composer
+          printf '{"github-oauth":{"github.com":"%s"}}' "${{ github.token }}" > sdk/data/composer/auth.json
+          docker version --format 'docker {{.Server.Version}} {{.Server.Arch}}'
+          docker compose version
+
+      - name: Run the recipe
+        working-directory: sdk
+        run: |
+          case "${{ matrix.recipe }}" in
+            76ce) recipe="./recipes/oxid-esales/shop/b-7.6.x-apex-dev.sh -e CE" ;;
+            65ce) recipe="./recipes/oxid-esales/shop/b-6.5.x-ce-dev/run.sh" ;;
+          esac
+          # The recipes call "docker compose exec" without -T, which needs a terminal.
+          script -qec "$recipe" /dev/null
+
+      - name: Check the shop
+        working-directory: sdk
+        run: |
+          set -o pipefail
+          ../ci/.github/arch-check/check.sh | tee ../result.tsv
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.ref }} / ${{ matrix.runner }} / ${{ matrix.recipe }}"
+            echo '```'
+            cat result.tsv 2>/dev/null || echo "no result, the recipe failed"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container state on failure
+        if: failure()
+        working-directory: sdk
+        run: |
+          docker compose ps -a || true
+          docker compose logs --tail 40 || true
+
+      - name: Keep the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.ref }}-${{ matrix.runner }}-${{ matrix.recipe }}
+          path: result.tsv
+          if-no-files-found: ignore
+
+  nginx:
+    name: nginx image / ${{ matrix.runner }} / ${{ matrix.platform || 'host platform' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-24.04-arm
+            platform: linux/amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable amd64 emulation
+        if: matrix.platform == 'linux/amd64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+
+      - name: Check the nginx image
+        env:
+          NGINX_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -o pipefail
+          .github/arch-check/nginx-check.sh | tee result.tsv
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### nginx image / ${{ matrix.runner }} / ${{ matrix.platform || 'host platform' }}"
+            echo '```'
+            cat result.tsv 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-nginx-${{ matrix.runner }}-${{ matrix.platform && 'amd64' || 'host' }}
+          path: result.tsv
+          if-no-files-found: ignore
