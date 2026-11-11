@@ -14,11 +14,12 @@ sbad() { if [ "${SELENIUM_BLOCKING:-1}" = "0" ]; then printf "NOTE\t%s\n" "$1"; 
 out host_arch "$(uname -m)"
 out docker_arch "$(docker version --format '{{.Server.Arch}}')"
 
-while read -r service state; do
+while read -r service state code; do
   arch=$(docker compose exec -T "$service" uname -m < /dev/null 2>/dev/null | tr -d '\r')
-  out "service_$service" "${arch:-unknown} $state"
-  [ "$state" = "running" ] || bad "service $service is $state"
-done < <(docker compose ps -a --format '{{.Service}} {{.State}}' | sort)
+  out "service_$service" "${arch:-not running} $state"
+  # A service like node is a shell for on-demand calls and ends with code 0.
+  [ "$state" = "running" ] || [ "$code" = "0" ] || bad "service $service is $state with code $code"
+done < <(docker compose ps -a --format '{{.Service}} {{.State}} {{.ExitCode}}' | sort)
 
 php() { docker compose exec -T php "$@"; }
 
