@@ -1,31 +1,31 @@
-name: nginx on the host platform
+name: selenium-chrome on the host platform
 
-# Evidence for the pull request "Run nginx on the platform of the host".
-# Starts the nginx service from services/nginx-rp.yml on an x86_64 and an
-# arm64 runner, from upstream master and from the branch, with a plain httpd
-# as backend, then sends a proxied request and a request to a Lua location.
+# Evidence for the pull request "Run selenium-chrome on the platform of the
+# host". Starts the selenium service from services/selenium-chrome.yml on an
+# x86_64 and an arm64 runner, from upstream master and from the branch, then
+# opens a Chrome session through WebDriver and loads a page from the apache
+# service.
 #
-# master on arm64 is expected to fail: the emulated nginx cannot initialize
-# its Lua VM. That job is allowed to fail, so the run shows the difference
-# without turning red.
+# master on arm64 is allowed to fail, so the run shows the state without the
+# change and does not turn red.
 
 on:
   push:
-    branches: [arch-ci-nginx]
+    branches: [arch-ci-selenium-chrome]
 
 permissions:
   contents: read
 
 jobs:
-  nginx:
+  selenium:
     name: ${{ matrix.ref }} on ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     continue-on-error: ${{ matrix.ref == 'master' && matrix.arch == 'arm64' }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        ref: [master, no-platform-pin-nginx]
+        ref: [master, no-platform-pin-selenium-chrome]
         arch: [x86_64, arm64]
         include:
           - arch: x86_64
@@ -52,11 +52,11 @@ jobs:
         with:
           platforms: amd64
 
-      - name: Start nginx from the service file and check it
+      - name: Start selenium from the service file and check it
         working-directory: sdk
         run: |
           set -o pipefail
-          ../ci/.github/arch-check/nginx-service-check.sh | tee ../result.tsv
+          ../ci/.github/arch-check/selenium-service-check.sh | tee ../result.tsv
 
       - name: Summary
         if: always()
