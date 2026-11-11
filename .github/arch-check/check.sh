@@ -14,12 +14,11 @@ sbad() { if [ "${SELENIUM_BLOCKING:-1}" = "0" ]; then printf "NOTE\t%s\n" "$1"; 
 out host_arch "$(uname -m)"
 out docker_arch "$(docker version --format '{{.Server.Arch}}')"
 
-for service in $(docker compose ps -a --services | sort); do
+while read -r service state; do
   arch=$(docker compose exec -T "$service" uname -m 2>/dev/null | tr -d '\r')
-  state=$(docker compose ps --format '{{.State}}' "$service")
   out "service_$service" "${arch:-unknown} $state"
   [ "$state" = "running" ] || bad "service $service is $state"
-done
+done < <(docker compose ps -a --format '{{.Service}} {{.State}}' | sort)
 
 php() { docker compose exec -T php "$@"; }
 
