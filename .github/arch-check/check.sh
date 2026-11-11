@@ -8,11 +8,13 @@ set -u
 fail=0
 out() { printf '%s\t%s\n' "$1" "$2"; }
 bad() { printf 'FAIL\t%s\n' "$1"; fail=1; }
+# The selenium service is outside the change under test when SELENIUM_BLOCKING=0.
+sbad() { if [ "${SELENIUM_BLOCKING:-1}" = "0" ]; then printf "NOTE\t%s\n" "$1"; else bad "$1"; fi; }
 
 out host_arch "$(uname -m)"
 out docker_arch "$(docker version --format '{{.Server.Arch}}')"
 
-for service in $(docker compose ps --services | sort); do
+for service in $(docker compose ps -a --services | sort); do
   arch=$(docker compose exec -T "$service" uname -m 2>/dev/null | tr -d '\r')
   state=$(docker compose ps --format '{{.State}}' "$service")
   out "service_$service" "${arch:-unknown} $state"
@@ -55,7 +57,7 @@ print("" if value is None else value)' "$@"; }
   session=$(wd -X POST http://selenium:4444/session -d "$caps")
   id=$(printf '%s' "$session" | field sessionId)
   if [ -z "$id" ]; then
-    bad "selenium did not open a session: $(printf '%s' "$session" | head -c 300)"
+    sbad "selenium did not open a session"
   else
     out selenium_browser "$(printf '%s' "$session" | field capabilities browserName) $(printf '%s' "$session" | field capabilities browserVersion)"
     wd -X POST "http://selenium:4444/session/$id/url" -d '{"url":"http://localhost.local/"}' > /dev/null
@@ -63,8 +65,8 @@ print("" if value is None else value)' "$@"; }
     links=$(wd -X POST "http://selenium:4444/session/$id/execute/sync" -d '{"script":"return document.querySelectorAll(\"a\").length","args":[]}' | field)
     wd -X DELETE "http://selenium:4444/session/$id" > /dev/null
     out selenium_start "title=[$title] links=$links"
-    [ -n "$title" ] || bad "selenium got no title from the start page"
-    [ "${links:-0}" -gt 0 ] 2>/dev/null || bad "selenium found no links on the start page"
+    [ -n "$title" ] || sbad "selenium got no title from the start page"
+    [ "${links:-0}" -gt 0 ] 2>/dev/null || sbad "selenium found no links on the start page"
   fi
 fi
 
