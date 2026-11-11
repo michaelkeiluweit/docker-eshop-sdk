@@ -43,16 +43,17 @@ out nginx_state "${state:-missing}"
 out nginx_arch "$(docker compose exec -T nginx uname -m 2>/dev/null | tr -d '\r')"
 out nginx_version "$(docker compose exec -T nginx nginx -v 2>&1 | tr -d '\r')"
 
-status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/)
+status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/)
 out proxy_status "$status"
 [ "$status" = "200" ] || bad "proxied request answers $status"
 
-# The image ships its own default page, so the status alone proves nothing.
-body=$(curl -s http://localhost:8000/ | tr -d '\n')
+# The image ships its own server for the name "localhost", so the requests go
+# to 127.0.0.1 and the status alone proves nothing.
+body=$(curl -s http://127.0.0.1:8000/ | tr -d '\n')
 out proxy_body "$body"
 case "$body" in *"It works!"*) ;; *) bad "answer does not come from the backend" ;; esac
 
-lua=$(curl -s http://localhost:8000/lua | tr -d '\n' | cut -c1-120)
+lua=$(curl -s http://127.0.0.1:8000/lua | tr -d '\n' | cut -c1-120)
 out lua "$lua"
 case "$lua" in lua*) ;; *) bad "Lua location does not answer" ;; esac
 
