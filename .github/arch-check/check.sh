@@ -15,7 +15,7 @@ out host_arch "$(uname -m)"
 out docker_arch "$(docker version --format '{{.Server.Arch}}')"
 
 while read -r service state; do
-  arch=$(docker compose exec -T "$service" uname -m 2>/dev/null | tr -d '\r')
+  arch=$(docker compose exec -T "$service" uname -m < /dev/null 2>/dev/null | tr -d '\r')
   out "service_$service" "${arch:-unknown} $state"
   [ "$state" = "running" ] || bad "service $service is $state"
 done < <(docker compose ps -a --format '{{.Service}} {{.State}}' | sort)
