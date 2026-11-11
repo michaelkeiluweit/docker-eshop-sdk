@@ -1,30 +1,31 @@
-name: php and apache on the host platform
+name: nginx on the host platform
 
-# Evidence for the pull request "Run apache and php on the platform of the
-# host". Installs CE 7.6 with the upstream recipe on an x86_64 and an arm64
-# runner, from upstream master and from the branch, then requests the start
-# page and the admin login page.
+# Evidence for the pull request "Run nginx on the platform of the host".
+# Starts the nginx service from services/nginx-rp.yml on an x86_64 and an
+# arm64 runner, from upstream master and from the branch, with a plain httpd
+# as backend, then sends a proxied request and a request to a Lua location.
 #
-# master on arm64 is expected to fail: the emulated apache exits. That job
-# is allowed to fail, so the run shows the difference without turning red.
+# master on arm64 is expected to fail: the emulated nginx cannot initialize
+# its Lua VM. That job is allowed to fail, so the run shows the difference
+# without turning red.
 
 on:
   push:
-    branches: [arch-ci-php-apache]
+    branches: [arch-ci-nginx]
 
 permissions:
   contents: read
 
 jobs:
-  shop:
+  nginx:
     name: ${{ matrix.ref }} on ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     continue-on-error: ${{ matrix.ref == 'master' && matrix.arch == 'arm64' }}
-    timeout-minutes: 60
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        ref: [master, no-platform-pin-php-apache]
+        ref: [master, no-platform-pin-nginx]
         arch: [x86_64, arm64]
         include:
           - arch: x86_64
@@ -44,35 +45,18 @@ jobs:
           ref: ${{ matrix.ref }}
           path: sdk
 
-      - name: Clone the recipes
-        run: git clone --recurse-submodules https://github.com/OXID-eSales/docker-eshop-sdk-recipes sdk/recipes/oxid-esales
-
-      # Pinned amd64 images need emulation on the arm64 runner.
+      # The pinned amd64 image needs emulation on the arm64 runner.
       - name: Enable amd64 emulation
         if: matrix.arch == 'arm64'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: amd64
 
-      - name: Prepare the host
-        run: |
-          echo "127.0.0.1 localhost.local" | sudo tee -a /etc/hosts
-          sudo systemctl stop mysql apache2 nginx 2>/dev/null || true
-          mkdir -p sdk/data/composer
-          printf '{"github-oauth":{"github.com":"%s"}}' "${{ github.token }}" > sdk/data/composer/auth.json
-
-      - name: Install CE 7.6 with the recipe
+      - name: Start nginx from the service file and check it
         working-directory: sdk
-        # The recipes call "docker compose exec" without -T, which needs a terminal.
-        run: script -qec "./recipes/oxid-esales/shop/b-7.6.x-apex-dev.sh -e CE" /dev/null
-
-      - name: Check architecture, start page and admin
-        working-directory: sdk
-        env:
-          SELENIUM_BLOCKING: 0
         run: |
           set -o pipefail
-          ../ci/.github/arch-check/check.sh | tee ../result.tsv
+          ../ci/.github/arch-check/nginx-service-check.sh | tee ../result.tsv
 
       - name: Summary
         if: always()
